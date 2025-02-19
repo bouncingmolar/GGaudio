@@ -77,7 +77,6 @@ client.on('messageCreate', (message) => {
     // Ignore messages from the bot itself or other bots
     if (message.author.bot) return;
     if (message.channelId === PING_CHANNEL || '768066072879300648') {
-        console.log(message.mentions);
         if (message.mentions.roles.has(CODENAMES_PING)) {
             // show_codenames function
             message.channel.send(`Codenames Portal opened \n\n quick someone, join the <#${CODENAMES_VOICE_CHANNEL}> to keep the portal open\n chat here <#${CODENAMES_CHAT_CHANNEL}>`);
@@ -137,11 +136,9 @@ client.on('interactionCreate', async (interaction) => {
 
 
 client.on('voiceStateUpdate', (oldState, newState) => {
-    console.log(oldState);
-    console.log(newState);
 
     // User Disconnected
-    if(oldState.channelId === VOICE_CHAT_CHANNEL || oldState.channelId === MUSIC_CHANNEL) {
+    if(oldState.channelId === VOICE_CHAT_CHANNEL || oldState.channelId === MUSIC_CHANNEL ) {
                 
         const members = oldState.channel.members;
 
@@ -158,8 +155,7 @@ client.on('voiceStateUpdate', (oldState, newState) => {
             // if timeoutID is not null, get the timeout and cancel it
             // create a new timeout, set timeoutID
         }
-      
-    } else if(oldState.channelId === CODENAMES_VOICE_CHANNEL){
+    } if(oldState.channelId === CODENAMES_VOICE_CHANNEL){
                         
         const members = oldState.channel.members;
 
@@ -178,10 +174,26 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
     }
     // User Connected 
-    if(newState.channelId === MUSIC_CHANNEL) {
+    if(newState.channelId === MUSIC_CHANNEL || newState.channelId === VOICE_CHAT_CHANNEL) {
         // if user (newstate.member.user.bot) is not bot, then if timeoutId is not null, remove the timeout,
         // set the timeoutId to null
-        showVC(oldState.guild);
+        const members = newState.channel.members;
+
+        let count = 0;
+
+        members.forEach(member => {
+            if(member.user.bot === false) count++;
+        });
+
+        if(count > 0) {
+            clearTimeout(timeoutID);
+            showVC(newState.guild);
+            // if timeoutID is not null, get the timeout and cancel it
+            // create a new timeout, set timeoutID
+        }
+        
+        
+
 
     } else if(newState.channelId === CODENAMES_VOICE_CHANNEL) {
         showCN(oldState.guild);
