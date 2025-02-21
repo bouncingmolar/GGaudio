@@ -19,3 +19,5 @@ export const showChannel = (channel: VoiceChannel|TextChannel) => {
 export const isVoiceOrMusicChannel = (channelId: string | null) => channelId && [CHANNELS.VOICE_CHANNEL, CHANNELS.MUSIC_CHANNEL].includes(channelId);
 
 export const isCodeNamesVoiceChannel = (channelId: string | null) => channelId && [CHANNELS.CODENAMES_VOICE_CHANNEL].includes(channelId);
+
+export const isGarticPhoneVoiceChannel = (channelId: string | null) => channelId && [CHANNELS.GARTICPHONE_VOICE_CHANNEL].includes(channelId);
