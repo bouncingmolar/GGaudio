@@ -42,7 +42,7 @@ client.on('voiceStateUpdate', (oldState, newState) => {
         const members = new Map([...voiceChannel.members, ...musicChannel.members]);
         const memberCount = Array.from(members.values()).filter(member => !member.user.bot).length;
 
-        if (memberCount < 5) {
+        if (memberCount < 1) {
             clearTimeout(voicechatTimeoutId);
             voicechatTimeoutId = setTimeout(hideChannel, INACTIVITY_TIMEOUT, voiceChatChannelGroup);
         } else {

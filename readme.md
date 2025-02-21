@@ -31,10 +31,10 @@ DISCORD_BOT_TOKEN=bot_token
 
 Make sure you replace `your_bot_token` with your actual bot token from the Discord Developer Portal.
 
-### \*\*4. Compile TypeScript\*\*
+### **4. Compile TypeScript**
 
 ```sh
-npm build
+npm run build
 ```
 
 ### **5. Run the Bot**
