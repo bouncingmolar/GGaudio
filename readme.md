@@ -34,7 +34,7 @@ Make sure you replace `your_bot_token` with your actual bot token from the Disco
 ### \*\*4. Compile TypeScript\*\*
 
 ```sh
-tsc
+npm build
 ```
 
 ### **5. Run the Bot**
