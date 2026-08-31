@@ -1,12 +1,112 @@
-import { Message, TextChannel, VoiceChannel } from "discord.js";
+import { Client, EmbedBuilder, Message, TextChannel, VoiceChannel } from "discord.js";
+import { getChickenKills, getOnlinePlayers } from "./minecraft";
 import { BOT_TOKEN } from './credentials';
-import { CHANNELS, INACTIVITY_TIMEOUT } from "./constants";
+import { CHANNELS, INACTIVITY_TIMEOUT, MINECRAFT_UPDATE_INTERVAL } from "./constants";
 import { getHumanMemberCount, hideChannel, isCodeNamesVoiceChannel, isGarticPhoneVoiceChannel, isVoiceOrMusicChannel, showChannel } from "./utilities";
 import { client } from "./client";
 
 let voicechatTimeoutId: NodeJS.Timeout|undefined;
 let codenamesChatTimeoutId: NodeJS.Timeout|undefined;
 let garticphoneChatTimeoutId: NodeJS.Timeout|undefined;
+let minecraftHideTimeoutId: NodeJS.Timeout|undefined;
+let minecraftUpdateIntervalId: NodeJS.Timeout|undefined;
+let minecraftStatusMessageId: string|undefined;
+
+const updateMinecraftStatus = async () => {
+    try {
+        const players = await getOnlinePlayers();
+
+        const minecraftStatusChannel = client.channels.cache.get(
+            CHANNELS.MINECRAFT_STATUS_CHANNEL
+        ) as TextChannel;
+
+        if (!minecraftStatusChannel) {
+            console.error("Minecraft status channel not found.");
+            return;
+        }
+
+        const embed = new EmbedBuilder()
+            .setTitle("🎮 Minecraft Online")
+            .setDescription(
+                players.length > 0
+                    ? players.map(player => `🟢 ${player}`).join("\n")
+                    : "Nobody is currently playing."
+            )
+            .setFooter({
+                text: `Online: ${players.length}`
+            })
+            .setTimestamp();
+
+        if (minecraftStatusMessageId) {
+            try {
+                const message = await minecraftStatusChannel.messages.fetch(
+                    minecraftStatusMessageId
+                );
+
+                await message.edit({ embeds: [embed] });
+                return;
+            } catch {
+                minecraftStatusMessageId = undefined;
+            }
+        }
+
+        const message = await minecraftStatusChannel.send({
+            embeds: [embed]
+        });
+
+        minecraftStatusMessageId = message.id;
+
+    } catch (error) {
+        console.error("Minecraft status update failed:", error);
+    }
+};
+
+const updateMinecraftVisibility = async () => {
+    try {
+        const players = await getOnlinePlayers();
+
+        const minecraftChannelGroup = client.channels.cache.get(
+            CHANNELS.MINECRAFT_CHANNEL_GROUP
+        ) as TextChannel;
+
+        if (!minecraftChannelGroup) {
+            console.error("Minecraft category not found.");
+            return;
+        }
+
+        if (players.length > 0) {
+            clearTimeout(minecraftHideTimeoutId);
+
+            showChannel(minecraftChannelGroup);
+
+            if (!minecraftUpdateIntervalId) {
+                await updateMinecraftStatus();
+
+                minecraftUpdateIntervalId = setInterval(
+                    updateMinecraftStatus,
+                    MINECRAFT_UPDATE_INTERVAL
+                );
+            }
+
+        } else {
+            if (!minecraftHideTimeoutId) {
+                minecraftHideTimeoutId = setTimeout(async () => {
+                    hideChannel(minecraftChannelGroup);
+
+                    if (minecraftUpdateIntervalId) {
+                        clearInterval(minecraftUpdateIntervalId);
+                        minecraftUpdateIntervalId = undefined;
+                    }
+
+                    minecraftHideTimeoutId = undefined;
+                }, INACTIVITY_TIMEOUT);
+            }
+        }
+
+    } catch (error) {
+        console.error("Minecraft visibility update failed:", error);
+    }
+};
 
 // Event: Bot is ready
 client.once('ready', () => {
@@ -15,7 +115,10 @@ client.once('ready', () => {
     } else {
         console.log('Logged in, but client.user is null.');
     }
+    updateMinecraftVisibility();
 });
+
+setInterval(updateMinecraftVisibility, MINECRAFT_UPDATE_INTERVAL);
 
 // Event: Message received
 client.on('messageCreate', (message: Message) => {
