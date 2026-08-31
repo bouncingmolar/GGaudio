@@ -1,7 +1,7 @@
 import { Message, TextChannel, VoiceChannel } from "discord.js";
 import { BOT_TOKEN } from './credentials';
 import { CHANNELS, INACTIVITY_TIMEOUT } from "./constants";
-import { hideChannel, isCodeNamesVoiceChannel, isGarticPhoneVoiceChannel, isVoiceOrMusicChannel, showChannel } from "./utilities";
+import { getHumanMemberCount, hideChannel, isCodeNamesVoiceChannel, isGarticPhoneVoiceChannel, isVoiceOrMusicChannel, showChannel } from "./utilities";
 import { client } from "./client";
 
 let voicechatTimeoutId: NodeJS.Timeout|undefined;
@@ -49,8 +49,7 @@ client.on('voiceStateUpdate', (oldState, newState) => {
         const musicChannel = client.channels.cache.get(CHANNELS.MUSIC_CHANNEL) as VoiceChannel;
         const voiceChatChannelGroup = client.channels.cache.get(CHANNELS.MUSIC_CHAT_CHANNEL_GROUP) as TextChannel;
 
-        const members = new Map([...voiceChannel.members, ...musicChannel.members]);
-        const memberCount = Array.from(members.values()).filter(member => !member.user.bot).length;
+        const memberCount = getHumanMemberCount(voiceChannel) + getHumanMemberCount(musicChannel);
 
         if (memberCount < 1) {
             clearTimeout(voicechatTimeoutId);
@@ -63,9 +62,7 @@ client.on('voiceStateUpdate', (oldState, newState) => {
     if ( isCodeNamesVoiceChannel(oldState.channelId) ) {
         const codenamesVoiceChannel = client.channels.cache.get(CHANNELS.CODENAMES_VOICE_CHANNEL) as VoiceChannel;
         const codenamesChannelGroup = client.channels.cache.get(CHANNELS.CODENAMES_CHAT_CHANNEL_GROUP) as TextChannel;
-        const members = codenamesVoiceChannel.members;
-        
-        let memberCount = Array.from(members.values()).filter(member => !member.user.bot).length;
+        const memberCount = getHumanMemberCount(codenamesVoiceChannel);
         
         if(memberCount < 1) {
             clearTimeout(codenamesChatTimeoutId);
@@ -79,9 +76,7 @@ client.on('voiceStateUpdate', (oldState, newState) => {
     if ( isGarticPhoneVoiceChannel(oldState.channelId) ) {
         const garticphoneVoiceChannel = client.channels.cache.get(CHANNELS.GARTICPHONE_VOICE_CHANNEL) as VoiceChannel;
         const garticphoneChannelGroup = client.channels.cache.get(CHANNELS.GARTICPHONE_CHANNEL_GROUP) as TextChannel;
-        const members = garticphoneVoiceChannel.members;
-        
-        let memberCount = Array.from(members.values()).filter(member => !member.user.bot).length;
+        const memberCount = getHumanMemberCount(garticphoneVoiceChannel);
         
         if(memberCount < 1) {
             clearTimeout(garticphoneChatTimeoutId);

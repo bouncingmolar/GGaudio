@@ -16,6 +16,10 @@ export const showChannel = (channel: VoiceChannel|TextChannel) => {
     });
 }
 
+export const getHumanMemberCount = (channel: VoiceChannel): number => {
+    return channel.members.filter(member => !member.user.bot).size;
+} 
+
 export const isVoiceOrMusicChannel = (channelId: string | null) => channelId && [CHANNELS.VOICE_CHANNEL, CHANNELS.MUSIC_CHANNEL].includes(channelId);
 
 export const isCodeNamesVoiceChannel = (channelId: string | null) => channelId && [CHANNELS.CODENAMES_VOICE_CHANNEL].includes(channelId);
