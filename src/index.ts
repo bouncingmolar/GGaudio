@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { Client, EmbedBuilder, Message, TextChannel, VoiceChannel } from "discord.js";
 import { getChickenKills, getOnlinePlayers } from "./minecraft";
 import { BOT_TOKEN } from './credentials';
