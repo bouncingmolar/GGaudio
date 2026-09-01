@@ -13,9 +13,34 @@ let minecraftHideTimeoutId: NodeJS.Timeout|undefined;
 let minecraftUpdateIntervalId: NodeJS.Timeout|undefined;
 let minecraftStatusMessageId: string|undefined;
 
+const minecraftPlayerHistory = new Map<string, number>();
+
 const updateMinecraftStatus = async () => {
     try {
         const players = await getOnlinePlayers();
+
+        const now = Date.now();
+        const oneHourAgo = now - 60 * 60 * 1000;
+        const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
+
+        // Remember when each currently-online player was last seen.
+        for (const player of players) {
+            minecraftPlayerHistory.set(player, now);
+        }
+
+        const recentPlayers = Array.from(minecraftPlayerHistory.entries())
+            .filter(([player, lastSeen]) =>
+                lastSeen >= oneHourAgo && !players.includes(player)
+            )
+            .map(([player]) => player);
+
+        const weeklyPlayers = Array.from(minecraftPlayerHistory.entries())
+            .filter(([player, lastSeen]) =>
+                lastSeen >= oneWeekAgo &&
+                !players.includes(player) &&
+                !recentPlayers.includes(player)
+            )
+            .map(([player]) => player);
 
         const minecraftStatusChannel = client.channels.cache.get(
             CHANNELS.MINECRAFT_STATUS_CHANNEL
@@ -26,12 +51,34 @@ const updateMinecraftStatus = async () => {
             return;
         }
 
+        const onlineLines = await Promise.all(
+            players.map(async player => {
+                const chickenKills = await getChickenKills(player);
+                return `🟢 ${player} — 🐔 ${chickenKills}`;
+            })
+        );
+
         const embed = new EmbedBuilder()
-            .setTitle("🎮 Minecraft Online")
-            .setDescription(
-                players.length > 0
-                    ? players.map(player => `🟢 ${player}`).join("\n")
-                    : "Nobody is currently playing."
+            .setTitle("🎮 Minecraft")
+            .addFields(
+                {
+                    name: "🟢 Online now",
+                    value: onlineLines.length > 0
+                        ? onlineLines.join("\n")
+                        : "Nobody is currently playing."
+                },
+                {
+                    name: "🕐 Played in the last hour",
+                    value: recentPlayers.length > 0
+                        ? recentPlayers.join("\n")
+                        : "Nobody else."
+                },
+                {
+                    name: "📅 Played this week",
+                    value: weeklyPlayers.length > 0
+                        ? weeklyPlayers.join("\n")
+                        : "Nobody else."
+                }
             )
             .setFooter({
                 text: `Online: ${players.length}`
