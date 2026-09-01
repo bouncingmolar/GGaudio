@@ -8,6 +8,7 @@ import {
     INACTIVITY_TIMEOUT,
     MINECRAFT_UPDATE_INTERVAL,
     MINECRAFT_STATUS_NAME_FORMAT,
+    MINECRAFT_STATUS_EMPTY_NAME_FORMAT,
     MINECRAFT_RENAME_COOLDOWN
 } from "./constants";
 import { getHumanMemberCount, hideChannel, isCodeNamesVoiceChannel, isGarticPhoneVoiceChannel, isVoiceOrMusicChannel, showChannel } from "./utilities";
@@ -23,10 +24,16 @@ let minecraftStatusMessageId: string|undefined;
 let minecraftRenameCooldownUntil = 0;
 let minecraftPendingName: string | undefined;
 
+type MinecraftPlayerHistory = {
+    lastSeen: number;
+    chickenKills: number;
+};
+
 type MinecraftHistory = {
-    players: Record<string, number>;
+    players: Record<string, MinecraftPlayerHistory>;
     statusMessageId: string | null;
 };
+
 const MINECRAFT_HISTORY_FILE = "./data/minecraft-history.json";
 const loadMinecraftHistory = async (): Promise<MinecraftHistory> => {
     try {
@@ -48,7 +55,7 @@ const saveMinecraftHistory = async (history: MinecraftHistory) => {
 };
 
 
-let minecraftPlayerHistory: Record<string, number> = {};
+let minecraftPlayerHistory: Record<string, MinecraftPlayerHistory> = {};
 
 const updateMinecraftStatusChannelName = async (playerCount: number) => {
     try {
@@ -61,7 +68,11 @@ const updateMinecraftStatusChannelName = async (playerCount: number) => {
             return;
         }
 
-        const newName = MINECRAFT_STATUS_NAME_FORMAT.replace(
+        const nameFormat = playerCount > 0
+            ? MINECRAFT_STATUS_NAME_FORMAT
+            : MINECRAFT_STATUS_EMPTY_NAME_FORMAT;
+
+        const newName = nameFormat.replace(
             "{}",
             String(playerCount)
         );
@@ -149,28 +160,40 @@ const updateMinecraftStatus = async () => {
         const oneDayAgo = now - 24 * 60 * 60 * 1000;
         const oneMonthAgo = now - 30 * 24 * 60 * 60 * 1000;
 
-        // Remember when each currently-online player was last seen.
+        
+        // Remember when each currently-online player was last seen,
+        // and update their chicken-kill total.
         for (const player of players) {
-            minecraftPlayerHistory[player] = now;
+            const chickenKills = await getChickenKills(player);
+
+            minecraftPlayerHistory[player] = {
+                lastSeen: now,
+                chickenKills
+            };
         }
+
         await saveMinecraftHistory({
             players: minecraftPlayerHistory,
             statusMessageId: minecraftStatusMessageId ?? null
         });
 
         const recentPlayers = Object.entries(minecraftPlayerHistory)
-            .filter(([player, lastSeen]) =>
-                lastSeen >= oneHourAgo && !players.includes(player)
+            .filter(([player, history]) =>
+                history.lastSeen >= oneDayAgo && !players.includes(player)
             )
-            .map(([player]) => player);
+            .map(([player, history]) =>
+                `${player} — chickens killed 🐔 ${history.chickenKills}`
+            );
 
-        const weeklyPlayers = Object.entries(minecraftPlayerHistory)
-            .filter(([player, lastSeen]) =>
-                lastSeen >= oneWeekAgo &&
-                !players.includes(player) &&
-                !recentPlayers.includes(player)
-            )
-            .map(([player]) => player);
+const monthlyPlayers = Object.entries(minecraftPlayerHistory)
+    .filter(([player, history]) =>
+        history.lastSeen >= oneMonthAgo &&
+        !players.includes(player) &&
+        history.lastSeen < oneDayAgo
+    )
+    .map(([player, history]) =>
+        `${player} — chickens killed 🐔 ${history.chickenKills}`
+    );
 
         const minecraftStatusChannel = client.channels.cache.get(
             CHANNELS.MINECRAFT_STATUS_CHANNEL
@@ -181,39 +204,39 @@ const updateMinecraftStatus = async () => {
             return;
         }
 
-        const onlineLines = await Promise.all(
-            players.map(async player => {
-                const chickenKills = await getChickenKills(player);
-                return `🟢 ${player} — chickens killed 🐔 ${chickenKills}`;
-            })
-        );
+    const onlineLines = players.map(player => {
+        const history = minecraftPlayerHistory[player];
+        const chickenKills = history?.chickenKills ?? 0;
 
-        const embed = new EmbedBuilder()
-            .setTitle("🎮 Minecraft")
-            .addFields(
-                {
-                    name: "🟢 Online now",
-                    value: onlineLines.length > 0
-                        ? onlineLines.join("\n")
-                        : "Nobody is currently playing."
-                },
-                {
-                    name: "🕐 Played in the last hour",
-                    value: recentPlayers.length > 0
-                        ? recentPlayers.join("\n")
-                        : "Nobody else."
-                },
-                {
-                    name: "📅 Played this week",
-                    value: weeklyPlayers.length > 0
-                        ? weeklyPlayers.join("\n")
-                        : "Nobody else."
-                }
-            )
-            .setFooter({
-                text: `Online: ${players.length}`
-            })
-            .setTimestamp();
+        return `🟢 ${player} — chickens killed 🐔 ${chickenKills}`;
+    });
+
+    const embed = new EmbedBuilder()
+        .setTitle("🎮 Minecraft")
+        .addFields(
+            {
+                name: "🟢 Online now",
+                value: onlineLines.length > 0
+                    ? onlineLines.join("\n")
+                    : "Nobody is currently playing."
+            },
+            {
+                name: "🕐 Played in the last 24 hours",
+                value: recentPlayers.length > 0
+                    ? recentPlayers.join("\n")
+                    : "Nobody else."
+            },
+            {
+                name: "📅 Played in the last 30 days",
+                value: monthlyPlayers.length > 0
+                    ? monthlyPlayers.join("\n")
+                    : "Nobody else."
+            }
+        )
+        .setFooter({
+            text: `Online: ${players.length} • Chicken kills are tracked permanently`
+        })
+        .setTimestamp();
 
             if (minecraftStatusMessageId) {
                 try {
