@@ -2,19 +2,25 @@ import { TextChannel, VoiceChannel } from "discord.js";
 import { CHANNELS } from "./constants";
 
 
-export const hideChannel = (channel: VoiceChannel|TextChannel) => {
+export const hideChannel = async (
+    channel: VoiceChannel | TextChannel
+) => {
     const everyoneRole = channel.guild.roles.everyone;
-    channel.permissionOverwrites.edit(everyoneRole, {
+
+    await channel.permissionOverwrites.edit(everyoneRole, {
         ViewChannel: false,
     });
-}
+};
 
-export const showChannel = (channel: VoiceChannel|TextChannel) => {
+export const showChannel = async (
+    channel: VoiceChannel | TextChannel
+) => {
     const everyoneRole = channel.guild.roles.everyone;
-    channel.permissionOverwrites.edit(everyoneRole, {
+
+    await channel.permissionOverwrites.edit(everyoneRole, {
         ViewChannel: null,
     });
-}
+};
 
 export const getHumanMemberCount = (channel: VoiceChannel): number => {
     return channel.members.filter(member => !member.user.bot).size;

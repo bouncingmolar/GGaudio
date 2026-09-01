@@ -3,7 +3,13 @@ import { readFile, writeFile, mkdir } from "fs/promises";
 import { Client, EmbedBuilder, Message, TextChannel, VoiceChannel } from "discord.js";
 import { getChickenKills, getOnlinePlayers } from "./minecraft";
 import { BOT_TOKEN } from './credentials';
-import { CHANNELS, INACTIVITY_TIMEOUT, MINECRAFT_UPDATE_INTERVAL } from "./constants";
+import {
+    CHANNELS,
+    INACTIVITY_TIMEOUT,
+    MINECRAFT_UPDATE_INTERVAL,
+    MINECRAFT_STATUS_NAME_FORMAT,
+    MINECRAFT_RENAME_COOLDOWN
+} from "./constants";
 import { getHumanMemberCount, hideChannel, isCodeNamesVoiceChannel, isGarticPhoneVoiceChannel, isVoiceOrMusicChannel, showChannel } from "./utilities";
 import { client } from "./client";
 
@@ -13,6 +19,9 @@ let garticphoneChatTimeoutId: NodeJS.Timeout|undefined;
 let minecraftHideTimeoutId: NodeJS.Timeout|undefined;
 let minecraftUpdateIntervalId: NodeJS.Timeout|undefined;
 let minecraftStatusMessageId: string|undefined;
+let minecraftRenameCooldownUntil = 0;
+let minecraftPendingName: string | undefined;
+
 type MinecraftHistory = {
     players: Record<string, number>;
     statusMessageId: string | null;
@@ -40,10 +49,101 @@ const saveMinecraftHistory = async (history: MinecraftHistory) => {
 
 let minecraftPlayerHistory: Record<string, number> = {};
 
+const updateMinecraftStatusChannelName = async (playerCount: number) => {
+    try {
+        const minecraftStatusChannel = client.channels.cache.get(
+            CHANNELS.MINECRAFT_STATUS_CHANNEL
+        ) as TextChannel;
+
+        if (!minecraftStatusChannel) {
+            console.error("Minecraft status channel not found for rename.");
+            return;
+        }
+
+        const newName = MINECRAFT_STATUS_NAME_FORMAT.replace(
+            "{}",
+            String(playerCount)
+        );
+
+        // The name is already correct.
+        // Do NOT consume/reset the rename cooldown.
+        if (minecraftStatusChannel.name === newName) {
+            minecraftPendingName = undefined;
+            return;
+        }
+
+        // Remember the name we actually want.
+        minecraftPendingName = newName;
+
+        const now = Date.now();
+
+        // Discord rename cooldown is still active.
+        // Don't attempt another rename.
+        if (now < minecraftRenameCooldownUntil) {
+            return;
+        }
+
+        const pendingName = minecraftPendingName;
+
+        if (!pendingName) {
+            return;
+        }
+
+        console.log(
+            `Renaming Minecraft status channel to: ${pendingName}`
+        );
+
+        await minecraftStatusChannel.edit({
+            name: pendingName,
+            reason: "Minecraft player count update"
+        });
+
+        minecraftPendingName = undefined;
+
+        // Start our own conservative cooldown after a successful rename.
+        minecraftRenameCooldownUntil =
+            Date.now() + MINECRAFT_RENAME_COOLDOWN;
+
+        console.log(
+            `Minecraft status channel renamed to: ${pendingName}`
+        );
+
+    } catch (error: any) {
+
+        if (error?.status === 429) {
+            const retryAfter =
+                Number(
+                    error?.retry_after ??
+                    error?.rawError?.retry_after ??
+                    300
+                );
+
+            minecraftRenameCooldownUntil =
+                Date.now() + retryAfter * 1000;
+
+            console.log(
+                `Minecraft status channel rename rate limited. ` +
+                `Waiting ${retryAfter}s.`
+            );
+
+            return;
+        }
+
+        console.error(
+            "Minecraft status channel rename failed:",
+            error
+        );
+    }
+};
+
 const updateMinecraftStatus = async () => {
     try {
         const players = await getOnlinePlayers();
-
+        
+        // Update the channel name if necessary.
+        // This function handles the Discord rename cooldown itself.
+        await updateMinecraftStatusChannelName(players.length);
+        
         const now = Date.now();
         const oneHourAgo = now - 60 * 60 * 1000;
         const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
@@ -177,7 +277,7 @@ const updateMinecraftStatus = async () => {
 const updateMinecraftVisibility = async () => {
     try {
         const players = await getOnlinePlayers();
-        
+
         const minecraftVoiceChannel = client.channels.cache.get(
             CHANNELS.MINECRAFT_VOICE_CHANNEL
         ) as VoiceChannel;
@@ -185,6 +285,7 @@ const updateMinecraftVisibility = async () => {
         const minecraftVoiceMembers = minecraftVoiceChannel
             ? getHumanMemberCount(minecraftVoiceChannel)
             : 0;
+
         const minecraftChannelGroup = client.channels.cache.get(
             CHANNELS.MINECRAFT_CHANNEL_GROUP
         ) as TextChannel;
@@ -194,18 +295,31 @@ const updateMinecraftVisibility = async () => {
         ) as TextChannel;
 
         if (!minecraftChannelGroup || !minecraftStatusChannel) {
-            console.error("Minecraft category not found.");
+            console.error("Minecraft category or status channel not found.");
             return;
         }
 
+        // ====================================================
+        // MINECRAFT ACTIVE
+        // ====================================================
+
         if (players.length > 0 || minecraftVoiceMembers > 0) {
+
+            // Someone is using Minecraft.
+            // Cancel the pending hide.
             clearTimeout(minecraftHideTimeoutId);
             minecraftHideTimeoutId = undefined;
 
+            // FIRST: make the Minecraft category visible.
             showChannel(minecraftChannelGroup);
+
+            // The status channel has its own permission override,
+            // so explicitly show it too.
             showChannel(minecraftStatusChannel);
 
+            // SECOND: start/update the status system.
             if (!minecraftUpdateIntervalId) {
+
                 await updateMinecraftStatus();
 
                 minecraftUpdateIntervalId = setInterval(
@@ -214,24 +328,57 @@ const updateMinecraftVisibility = async () => {
                 );
             }
 
-        } else {
-            if (!minecraftHideTimeoutId) {
-                minecraftHideTimeoutId = setTimeout(async () => {
-                    hideChannel(minecraftChannelGroup);
-                    hideChannel(minecraftStatusChannel);
+            // THIRD: try to rename the status channel.
+            // This is deliberately secondary to showing the channel.
+            await updateMinecraftStatusChannelName(players.length);
 
+        }
+
+        // ====================================================
+        // MINECRAFT INACTIVE
+        // ====================================================
+
+        else {
+
+            // Nobody is playing and nobody is in the Minecraft
+            // voice channel.
+
+            if (!minecraftHideTimeoutId) {
+
+                console.log(
+                    "Minecraft inactive. Starting 1 hour hide timer."
+                );
+
+                minecraftHideTimeoutId = setTimeout(async () => {
+
+                    console.log(
+                        "Minecraft inactive for 1 hour. Hiding category."
+                    );
+
+                    // Stop updating the embed.
                     if (minecraftUpdateIntervalId) {
                         clearInterval(minecraftUpdateIntervalId);
                         minecraftUpdateIntervalId = undefined;
                     }
 
+                    // Hide the category.
+                    hideChannel(minecraftChannelGroup);
+
+                    // Because this channel has an explicit permission
+                    // override, hide it explicitly as well.
+                    hideChannel(minecraftStatusChannel);
+
                     minecraftHideTimeoutId = undefined;
+
                 }, INACTIVITY_TIMEOUT);
             }
         }
 
     } catch (error) {
-        console.error("Minecraft visibility update failed:", error);
+        console.error(
+            "Minecraft visibility update failed:",
+            error
+        );
     }
 };
 
@@ -248,7 +395,7 @@ client.once('ready', async() => {
     minecraftPlayerHistory = minecraftHistory.players;
     minecraftStatusMessageId = minecraftHistory.statusMessageId ?? undefined;
     
-    updateMinecraftVisibility();
+    await updateMinecraftVisibility();
     setInterval(updateMinecraftVisibility, MINECRAFT_UPDATE_INTERVAL);
 });
 
