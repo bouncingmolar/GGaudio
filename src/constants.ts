@@ -19,7 +19,7 @@ export const CHANNELS = {
 
 export const INACTIVITY_TIMEOUT = 3600000;
 export const MINECRAFT_UPDATE_INTERVAL = 30000;
-export const MINECRAFT_STATUS_NAME_FORMAT = "🟢 minecrafters-{}";
-export const MINECRAFT_STATUS_EMPTY_NAME_FORMAT = "🔴 minestats";
+export const MINECRAFT_STATUS_NAME_FORMAT = "🟢┋minecrafters-{}";
+export const MINECRAFT_STATUS_EMPTY_NAME_FORMAT = "🔴┋minestats";
 
 export const MINECRAFT_RENAME_COOLDOWN = 300000; // 5 minutes
