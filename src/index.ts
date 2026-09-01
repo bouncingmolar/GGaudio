@@ -189,15 +189,21 @@ const updateMinecraftVisibility = async () => {
             CHANNELS.MINECRAFT_CHANNEL_GROUP
         ) as TextChannel;
 
-        if (!minecraftChannelGroup) {
+        const minecraftStatusChannel = client.channels.cache.get(
+            CHANNELS.MINECRAFT_STATUS_CHANNEL
+        ) as TextChannel;
+
+        if (!minecraftChannelGroup || !minecraftStatusChannel) {
             console.error("Minecraft category not found.");
             return;
         }
 
         if (players.length > 0 || minecraftVoiceMembers > 0) {
             clearTimeout(minecraftHideTimeoutId);
+            minecraftHideTimeoutId = undefined;
 
             showChannel(minecraftChannelGroup);
+            showChannel(minecraftStatusChannel);
 
             if (!minecraftUpdateIntervalId) {
                 await updateMinecraftStatus();
@@ -212,6 +218,7 @@ const updateMinecraftVisibility = async () => {
             if (!minecraftHideTimeoutId) {
                 minecraftHideTimeoutId = setTimeout(async () => {
                     hideChannel(minecraftChannelGroup);
+                    hideChannel(minecraftStatusChannel);
 
                     if (minecraftUpdateIntervalId) {
                         clearInterval(minecraftUpdateIntervalId);
