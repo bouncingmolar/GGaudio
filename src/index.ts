@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { readFile, writeFile, mkdir } from "fs/promises";
 import { Client, EmbedBuilder, Message, TextChannel, VoiceChannel } from "discord.js";
 import { getChickenKills, getOnlinePlayers } from "./minecraft";
 import { BOT_TOKEN } from './credentials';
@@ -12,8 +13,32 @@ let garticphoneChatTimeoutId: NodeJS.Timeout|undefined;
 let minecraftHideTimeoutId: NodeJS.Timeout|undefined;
 let minecraftUpdateIntervalId: NodeJS.Timeout|undefined;
 let minecraftStatusMessageId: string|undefined;
+type MinecraftHistory = {
+    players: Record<string, number>;
+    statusMessageId: string | null;
+};
+const MINECRAFT_HISTORY_FILE = "./data/minecraft-history.json";
+const loadMinecraftHistory = async (): Promise<MinecraftHistory> => {
+    try {
+        const data = await readFile(MINECRAFT_HISTORY_FILE, "utf8");
+        return JSON.parse(data);
+    } catch {
+        return {
+            players: {},
+            statusMessageId: null
+        };
+    }
+};
+const saveMinecraftHistory = async (history: MinecraftHistory) => {
+    await mkdir("./data", { recursive: true });
+    await writeFile(
+        MINECRAFT_HISTORY_FILE,
+        JSON.stringify(history, null, 2)
+    );
+};
 
-const minecraftPlayerHistory = new Map<string, number>();
+
+let minecraftPlayerHistory: Record<string, number> = {};
 
 const updateMinecraftStatus = async () => {
     try {
@@ -22,19 +47,29 @@ const updateMinecraftStatus = async () => {
         const now = Date.now();
         const oneHourAgo = now - 60 * 60 * 1000;
         const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
+        // Remove players from history who haven't been seen in the last week.
+        for (const [player, lastSeen] of Object.entries(minecraftPlayerHistory)) {
+            if (lastSeen < oneWeekAgo) {
+                delete minecraftPlayerHistory[player];
+            }
+        }
 
         // Remember when each currently-online player was last seen.
         for (const player of players) {
-            minecraftPlayerHistory.set(player, now);
+            minecraftPlayerHistory[player] = now;
         }
+        await saveMinecraftHistory({
+            players: minecraftPlayerHistory,
+            statusMessageId: minecraftStatusMessageId ?? null
+        });
 
-        const recentPlayers = Array.from(minecraftPlayerHistory.entries())
+        const recentPlayers = Object.entries(minecraftPlayerHistory)
             .filter(([player, lastSeen]) =>
                 lastSeen >= oneHourAgo && !players.includes(player)
             )
             .map(([player]) => player);
 
-        const weeklyPlayers = Array.from(minecraftPlayerHistory.entries())
+        const weeklyPlayers = Object.entries(minecraftPlayerHistory)
             .filter(([player, lastSeen]) =>
                 lastSeen >= oneWeekAgo &&
                 !players.includes(player) &&
@@ -112,6 +147,10 @@ const updateMinecraftStatus = async () => {
 
             if (existingMessage) {
                 minecraftStatusMessageId = existingMessage.id;
+                await saveMinecraftHistory({
+                    players: minecraftPlayerHistory,
+                    statusMessageId: minecraftStatusMessageId
+});
 
                 await existingMessage.edit({
                     embeds: [embed]
@@ -125,6 +164,10 @@ const updateMinecraftStatus = async () => {
             });
 
             minecraftStatusMessageId = message.id;
+            await saveMinecraftHistory({
+                players: minecraftPlayerHistory,
+                statusMessageId: minecraftStatusMessageId
+});
 
     } catch (error) {
         console.error("Minecraft status update failed:", error);
@@ -186,12 +229,18 @@ const updateMinecraftVisibility = async () => {
 };
 
 // Event: Bot is ready
-client.once('ready', () => {
+client.once('ready', async() => {
     if (client.user) {
         console.log(`Logged in as ${client.user.tag}!`);
     } else {
         console.log('Logged in, but client.user is null.');
     }
+    
+    const minecraftHistory = await loadMinecraftHistory();
+
+    minecraftPlayerHistory = minecraftHistory.players;
+    minecraftStatusMessageId = minecraftHistory.statusMessageId ?? undefined;
+    
     updateMinecraftVisibility();
     setInterval(updateMinecraftVisibility, MINECRAFT_UPDATE_INTERVAL);
 });
