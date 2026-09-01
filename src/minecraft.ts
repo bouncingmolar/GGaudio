@@ -41,6 +41,7 @@ export const getOnlinePlayers = async (): Promise<string[]> => {
     return lines[1]
         .split(",")
         .map(player => player.trim())
+        .map(player => player.replace(/^default\\?:/, "").replace(/\\([_])/g, "$1"))
         .filter(Boolean);
 };
 

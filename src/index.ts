@@ -85,24 +85,46 @@ const updateMinecraftStatus = async () => {
             })
             .setTimestamp();
 
-        if (minecraftStatusMessageId) {
-            try {
-                const message = await minecraftStatusChannel.messages.fetch(
-                    minecraftStatusMessageId
-                );
+            if (minecraftStatusMessageId) {
+                try {
+                    const message = await minecraftStatusChannel.messages.fetch(
+                        minecraftStatusMessageId
+                    );
 
-                await message.edit({ embeds: [embed] });
-                return;
-            } catch {
-                minecraftStatusMessageId = undefined;
+                    await message.edit({ embeds: [embed] });
+                    return;
+                } catch {
+                    minecraftStatusMessageId = undefined;
+                }
             }
-        }
 
-        const message = await minecraftStatusChannel.send({
-            embeds: [embed]
-        });
+            // If we don't know the message ID, look for an existing GG Bot message.
+            const messages = await minecraftStatusChannel.messages.fetch({
+                limit: 20
+            });
 
-        minecraftStatusMessageId = message.id;
+            const existingMessage = messages.find(
+                message =>
+                    message.author.id === client.user?.id &&
+                    message.embeds.length > 0 &&
+                    message.embeds[0].title === "🎮 Minecraft"
+            );
+
+            if (existingMessage) {
+                minecraftStatusMessageId = existingMessage.id;
+
+                await existingMessage.edit({
+                    embeds: [embed]
+                });
+
+                return;
+            }
+
+            const message = await minecraftStatusChannel.send({
+                embeds: [embed]
+            });
+
+            minecraftStatusMessageId = message.id;
 
     } catch (error) {
         console.error("Minecraft status update failed:", error);
