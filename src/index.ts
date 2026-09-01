@@ -89,7 +89,7 @@ const updateMinecraftStatus = async () => {
         const onlineLines = await Promise.all(
             players.map(async player => {
                 const chickenKills = await getChickenKills(player);
-                return `🟢 ${player} — 🐔 ${chickenKills}`;
+                return `🟢 ${player} — chickens killed 🐔 ${chickenKills}`;
             })
         );
 
