@@ -16,7 +16,8 @@ import { client } from "./client";
 let voicechatTimeoutId: NodeJS.Timeout|undefined;
 let codenamesChatTimeoutId: NodeJS.Timeout|undefined;
 let garticphoneChatTimeoutId: NodeJS.Timeout|undefined;
-let minecraftHideTimeoutId: NodeJS.Timeout|undefined;
+
+//let minecraftHideTimeoutId: NodeJS.Timeout|undefined;
 let minecraftUpdateIntervalId: NodeJS.Timeout|undefined;
 let minecraftStatusMessageId: string|undefined;
 let minecraftRenameCooldownUntil = 0;
@@ -145,14 +146,8 @@ const updateMinecraftStatus = async () => {
         await updateMinecraftStatusChannelName(players.length);
         
         const now = Date.now();
-        const oneHourAgo = now - 60 * 60 * 1000;
-        const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
-        // Remove players from history who haven't been seen in the last week.
-        for (const [player, lastSeen] of Object.entries(minecraftPlayerHistory)) {
-            if (lastSeen < oneWeekAgo) {
-                delete minecraftPlayerHistory[player];
-            }
-        }
+        const oneDayAgo = now - 24 * 60 * 60 * 1000;
+        const oneMonthAgo = now - 30 * 24 * 60 * 60 * 1000;
 
         // Remember when each currently-online player was last seen.
         for (const player of players) {
@@ -278,14 +273,6 @@ const updateMinecraftVisibility = async () => {
     try {
         const players = await getOnlinePlayers();
 
-        const minecraftVoiceChannel = client.channels.cache.get(
-            CHANNELS.MINECRAFT_VOICE_CHANNEL
-        ) as VoiceChannel;
-
-        const minecraftVoiceMembers = minecraftVoiceChannel
-            ? getHumanMemberCount(minecraftVoiceChannel)
-            : 0;
-
         const minecraftChannelGroup = client.channels.cache.get(
             CHANNELS.MINECRAFT_CHANNEL_GROUP
         ) as TextChannel;
@@ -295,86 +282,33 @@ const updateMinecraftVisibility = async () => {
         ) as TextChannel;
 
         if (!minecraftChannelGroup || !minecraftStatusChannel) {
-            console.error("Minecraft category or status channel not found.");
+            console.error(
+                "Minecraft category or status channel not found."
+            );
             return;
         }
 
-        // ====================================================
-        // MINECRAFT ACTIVE
-        // ====================================================
+        // Minecraft is always visible.
+        // Visibility takes priority over channel renaming.
+        showChannel(minecraftChannelGroup);
+        showChannel(minecraftStatusChannel);
 
-        if (players.length > 0 || minecraftVoiceMembers > 0) {
+        // Update the name separately.
+        await updateMinecraftStatusChannelName(players.length);
 
-            // Someone is using Minecraft.
-            // Cancel the pending hide.
-            clearTimeout(minecraftHideTimeoutId);
-            minecraftHideTimeoutId = undefined;
+        // Start the status updater if it isn't already running.
+        if (!minecraftUpdateIntervalId) {
 
-            // FIRST: make the Minecraft category visible.
-            showChannel(minecraftChannelGroup);
+            await updateMinecraftStatus();
 
-            // The status channel has its own permission override,
-            // so explicitly show it too.
-            showChannel(minecraftStatusChannel);
-
-            // SECOND: start/update the status system.
-            if (!minecraftUpdateIntervalId) {
-
-                await updateMinecraftStatus();
-
-                minecraftUpdateIntervalId = setInterval(
-                    updateMinecraftStatus,
-                    MINECRAFT_UPDATE_INTERVAL
-                );
-            }
-
-            // THIRD: try to rename the status channel.
-            // This is deliberately secondary to showing the channel.
-            await updateMinecraftStatusChannelName(players.length);
-
-        }
-
-        // ====================================================
-        // MINECRAFT INACTIVE
-        // ====================================================
-
-        else {
-
-            // Nobody is playing and nobody is in the Minecraft
-            // voice channel.
-
-            if (!minecraftHideTimeoutId) {
-
-                console.log(
-                    "Minecraft inactive. Starting 1 hour hide timer."
-                );
-
-                minecraftHideTimeoutId = setTimeout(async () => {
-
-                    console.log(
-                        "Minecraft inactive for 1 hour. Hiding category."
-                    );
-
-                    // Stop updating the embed.
-                    if (minecraftUpdateIntervalId) {
-                        clearInterval(minecraftUpdateIntervalId);
-                        minecraftUpdateIntervalId = undefined;
-                    }
-
-                    // Hide the category.
-                    hideChannel(minecraftChannelGroup);
-
-                    // Because this channel has an explicit permission
-                    // override, hide it explicitly as well.
-                    hideChannel(minecraftStatusChannel);
-
-                    minecraftHideTimeoutId = undefined;
-
-                }, INACTIVITY_TIMEOUT);
-            }
+            minecraftUpdateIntervalId = setInterval(
+                updateMinecraftStatus,
+                MINECRAFT_UPDATE_INTERVAL
+            );
         }
 
     } catch (error) {
+
         console.error(
             "Minecraft visibility update failed:",
             error
