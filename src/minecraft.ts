@@ -29,7 +29,7 @@ export const runMinecraftCommand = (command: string): Promise<string> => {
 export const getOnlinePlayers = async (): Promise<string[]> => {
     const output = await runMinecraftCommand("list");
 
-    const match = output.match(/There are \d+ of a max of \d+ players online: ?(.*)/);
+    const match = output.match(/There are \d+ out of maximum \d+ players online\.\s*(.*)/);
 
     if (!match || !match[1].trim()) {
         return [];

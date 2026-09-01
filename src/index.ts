@@ -65,7 +65,14 @@ const updateMinecraftStatus = async () => {
 const updateMinecraftVisibility = async () => {
     try {
         const players = await getOnlinePlayers();
+        
+        const minecraftVoiceChannel = client.channels.cache.get(
+            CHANNELS.MINECRAFT_VOICE_CHANNEL
+        ) as VoiceChannel;
 
+        const minecraftVoiceMembers = minecraftVoiceChannel
+            ? getHumanMemberCount(minecraftVoiceChannel)
+            : 0;
         const minecraftChannelGroup = client.channels.cache.get(
             CHANNELS.MINECRAFT_CHANNEL_GROUP
         ) as TextChannel;
@@ -75,7 +82,7 @@ const updateMinecraftVisibility = async () => {
             return;
         }
 
-        if (players.length > 0) {
+        if (players.length > 0 || minecraftVoiceMembers > 0) {
             clearTimeout(minecraftHideTimeoutId);
 
             showChannel(minecraftChannelGroup);
@@ -117,9 +124,10 @@ client.once('ready', () => {
         console.log('Logged in, but client.user is null.');
     }
     updateMinecraftVisibility();
+    setInterval(updateMinecraftVisibility, MINECRAFT_UPDATE_INTERVAL);
 });
 
-setInterval(updateMinecraftVisibility, MINECRAFT_UPDATE_INTERVAL);
+
 
 // Event: Message received
 client.on('messageCreate', (message: Message) => {
