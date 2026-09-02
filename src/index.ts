@@ -18,7 +18,7 @@ let voicechatTimeoutId: NodeJS.Timeout|undefined;
 let codenamesChatTimeoutId: NodeJS.Timeout|undefined;
 let garticphoneChatTimeoutId: NodeJS.Timeout|undefined;
 
-let minecraftUpdateIntervalId: NodeJS.Timeout|undefined;
+let minecraftHideTimeoutId: NodeJS.Timeout|undefined;
 let minecraftStatusMessageId: string|undefined;
 let minecraftRenameCooldownUntil = 0;
 let minecraftPendingName: string | undefined;
