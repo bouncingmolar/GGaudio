@@ -18,7 +18,6 @@ let voicechatTimeoutId: NodeJS.Timeout|undefined;
 let codenamesChatTimeoutId: NodeJS.Timeout|undefined;
 let garticphoneChatTimeoutId: NodeJS.Timeout|undefined;
 
-let minecraftHideTimeoutId: NodeJS.Timeout|undefined;
 let minecraftUpdateIntervalId: NodeJS.Timeout|undefined;
 let minecraftStatusMessageId: string|undefined;
 let minecraftRenameCooldownUntil = 0;
@@ -337,16 +336,6 @@ const updateMinecraftVisibility = async () => {
             // Its child channels inherit this visibility.
             showChannel(minecraftChannelGroup);
 
-            // Start the status updater if it isn't already running.
-            if (!minecraftUpdateIntervalId) {
-                await updateMinecraftStatus();
-
-                minecraftUpdateIntervalId = setInterval(
-                    updateMinecraftStatus,
-                    MINECRAFT_UPDATE_INTERVAL
-                );
-            }
-
         }
 
         // ====================================================
@@ -369,12 +358,6 @@ const updateMinecraftVisibility = async () => {
                     console.log(
                         "Minecraft inactive for 1 hour. Hiding Minecraft category."
                     );
-
-                    // Stop updating the embed.
-                    if (minecraftUpdateIntervalId) {
-                        clearInterval(minecraftUpdateIntervalId);
-                        minecraftUpdateIntervalId = undefined;
-                    }
 
                     // Hide the CATEGORY.
                     // Its child channels should inherit this.
@@ -410,7 +393,10 @@ client.once('ready', async() => {
     minecraftPlayerHistory = minecraftHistory.players;
     minecraftStatusMessageId = minecraftHistory.statusMessageId ?? undefined;
     
+    await updateMinecraftStatus();
     await updateMinecraftVisibility();
+
+    setInterval(updateMinecraftStatus, MINECRAFT_UPDATE_INTERVAL);
     setInterval(updateMinecraftVisibility, MINECRAFT_UPDATE_INTERVAL);
 });
 
