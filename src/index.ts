@@ -18,7 +18,7 @@ let voicechatTimeoutId: NodeJS.Timeout|undefined;
 let codenamesChatTimeoutId: NodeJS.Timeout|undefined;
 let garticphoneChatTimeoutId: NodeJS.Timeout|undefined;
 
-//let minecraftHideTimeoutId: NodeJS.Timeout|undefined;
+let minecraftHideTimeoutId: NodeJS.Timeout|undefined;
 let minecraftUpdateIntervalId: NodeJS.Timeout|undefined;
 let minecraftStatusMessageId: string|undefined;
 let minecraftRenameCooldownUntil = 0;
@@ -296,6 +296,14 @@ const updateMinecraftVisibility = async () => {
     try {
         const players = await getOnlinePlayers();
 
+        const minecraftVoiceChannel = client.channels.cache.get(
+            CHANNELS.MINECRAFT_VOICE_CHANNEL
+        ) as VoiceChannel;
+
+        const minecraftVoiceMembers = minecraftVoiceChannel
+            ? getHumanMemberCount(minecraftVoiceChannel)
+            : 0;
+
         const minecraftChannelGroup = client.channels.cache.get(
             CHANNELS.MINECRAFT_CHANNEL_GROUP
         ) as TextChannel;
@@ -311,27 +319,77 @@ const updateMinecraftVisibility = async () => {
             return;
         }
 
-        // Minecraft is always visible.
-        // Visibility takes priority over channel renaming.
-        showChannel(minecraftChannelGroup);
+        // The status channel is ALWAYS visible.
         showChannel(minecraftStatusChannel);
 
-        // Update the name separately.
-        await updateMinecraftStatusChannelName(players.length);
+        // ====================================================
+        // MINECRAFT ACTIVE
+        // ====================================================
 
-        // Start the status updater if it isn't already running.
-        if (!minecraftUpdateIntervalId) {
+        if (players.length > 0 || minecraftVoiceMembers > 0) {
 
-            await updateMinecraftStatus();
+            // Someone is using Minecraft.
+            // Cancel the pending hide timer.
+            clearTimeout(minecraftHideTimeoutId);
+            minecraftHideTimeoutId = undefined;
 
-            minecraftUpdateIntervalId = setInterval(
-                updateMinecraftStatus,
-                MINECRAFT_UPDATE_INTERVAL
-            );
+            // Show the Minecraft category.
+            // Its child channels inherit this visibility.
+            showChannel(minecraftChannelGroup);
+
+            // Start the status updater if it isn't already running.
+            if (!minecraftUpdateIntervalId) {
+                await updateMinecraftStatus();
+
+                minecraftUpdateIntervalId = setInterval(
+                    updateMinecraftStatus,
+                    MINECRAFT_UPDATE_INTERVAL
+                );
+            }
+
+        }
+
+        // ====================================================
+        // MINECRAFT INACTIVE
+        // ====================================================
+
+        else {
+
+            // Nobody is playing and nobody is in the Minecraft
+            // voice channel.
+
+            if (!minecraftHideTimeoutId) {
+
+                console.log(
+                    "Minecraft inactive. Starting 1 hour hide timer."
+                );
+
+                minecraftHideTimeoutId = setTimeout(async () => {
+
+                    console.log(
+                        "Minecraft inactive for 1 hour. Hiding Minecraft category."
+                    );
+
+                    // Stop updating the embed.
+                    if (minecraftUpdateIntervalId) {
+                        clearInterval(minecraftUpdateIntervalId);
+                        minecraftUpdateIntervalId = undefined;
+                    }
+
+                    // Hide the CATEGORY.
+                    // Its child channels should inherit this.
+                    hideChannel(minecraftChannelGroup);
+
+                    // DO NOT hide the status channel.
+                    // It must remain visible permanently.
+
+                    minecraftHideTimeoutId = undefined;
+
+                }, INACTIVITY_TIMEOUT);
+            }
         }
 
     } catch (error) {
-
         console.error(
             "Minecraft visibility update failed:",
             error
